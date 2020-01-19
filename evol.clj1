@@ -1,0 +1,21 @@
+(ns evolution)
+
+(def *width* 100)
+(def *height* 30)
+(def *jungle* '(45 10 10 10))
+(def *plant-energy* 80)
+(def *plants* {})
+
+(defn random [range]
+  (Math/round (rand range)))
+
+(defn random-plant [left top width height]
+  (let [pos (list (+ left (random width)) (+ top (random height)))]
+    pos))
+
+(defn add-plants [plants]
+  (assoc 
+    (assoc plants (apply random-plant *jungle*) true)
+    (random-plant 0 0 *width* *height*) true))
+
+(defstruct animal x y energy dir genes)

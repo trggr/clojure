@@ -1,0 +1,89 @@
+(ns probe.core)
+
+(use ['clojure.contrib.sql :as 'sql])
+
+(def query
+   "with x as (
+      select d.yyyymm, e.process_name, to_char(max(e.version), 'yyyy-mm-dd') ver
+      from busintel.etl_batch e, busintel.d_date d
+      where e.batch_upto > timestamp_iso(d.month_first_day) and
+            e.batch_from < (timestamp_iso(d.month_first_day) + 1 month) and
+            e.status = 'OK' and d.year >= 2009 and d.day_of_month = 1
+      group by d.yyyymm, e.process_name)
+    select x.yyyymm mon, x.process_name process, x.ver,
+           d.data_source_desc desc,
+           x.yyyymm || '-' || x.process_name  mon_proc
+    from x, busintel.data_source d
+    where x.process_name = d.data_source_cd
+    order by x.yyyymm, d.report_order")
+
+(def devdb {:classname "com.ibm.db2.jcc.DB2Driver"
+	    :subprotocol "db2"
+    	    :subname "//btscqm02.boulder.ibm.com:50000/cqm_dw:retrieveMessagesFromServerOnGetMessage=true;"
+   	    :user "cqmetl"
+	    :password "fun2work"})
+
+(def prodb {:classname "com.ibm.db2.jcc.DB2Driver"
+	    :subprotocol "db2"
+    	    :subname "//b03cxnp01103.gho.boulder.ibm.com:60001/cqm_prod"
+   	    :user "cqmetl"
+	    :password "moh00ple"})
+
+;;(def devr (with-connection devdb
+;;	    (with-query-results devr [query] (into [] devr))))
+
+;;(def pror (with-connection prodb
+;;	    (with-query-results pror [query] (into [] pror))))
+
+; probe.core> (keys (first devr))
+; (:mon :process :ver :desc :mon_proc)
+; probe.core> (vals (first devr))
+; (200901 "STEVE" "2010-03-12" "Manual accounts" "200901-STEVE")
+
+(defn make-key
+  [res a b]
+  (str (a res) "-" (b res)))
+
+
+(comment 
+  (count devr)
+(count pror)
+(keys (first devr))
+(vals (first pror))
+(map #(str (:mon %1) "-" (:process %1)) devr)
+
+(type res)
+;; -> clojure.lang.PersistentVector
+
+(map :etl_batch_id res)
+;; -> (4014 3944 3848 3690 3601)
+
+(reduce + (map :etl_batch_id res))
+;; -> 19097
+
+(reduce #(+ (:etl_batch_id %2) %1) 0 res)
+;; -> 19097
+
+(count res)
+;; -> 5
+
+(count (subvec res 2 5))
+;; -> 3 
+
+;(with-connection db 
+;   (with-query-results rs ["select * from busintel.d_metric"] 
+;     ; rs will be a sequence of maps, 
+;     ; one for each record in the result set. 
+;     (dorun (map #(println (:title %)) rs))))
+(with-connection db
+  (with-query-results res ["select * from busintel.d_metric"]
+     (doseq [rec res]
+        (println rec))))
+
+
+(defn hash-filter [pred coll]
+  (reduce (fn [m x]
+	    (assoc m (pred x)
+		   (cons x (get m (pred x) '()))))
+	  {} coll))
+)
