@@ -1,0 +1,81 @@
+as-sev1 select company_id, decimal(auto_value, 18, 2) x from busintel.f_metric_summary_all_vw where report_month = ':m' and metric_code = 'SEV1'
+
+ad-sev1 select company_id, decimal(sum(resolution_hours)/count(1), 18, 2) x
+        from busintel.f_incident
+        where severity_id = 1 and resolution_hours >= 0 and report_month = ':m'
+        group by company_id
+
+as-sev2 select company_id, decimal(auto_value, 18,2) x from busintel.f_metric_summary_all_vw where report_month = ':m' and metric_code = 'SEV2'
+
+ad-sev2 select company_id, decimal(sum(resolution_hours)/count(1), 18, 2) x
+        from busintel.f_incident
+        where severity_id = 2 and resolution_hours >= 0 and report_month = ':m'
+        group by company_id
+
+as-csr  select company_id, decimal(auto_value, 5, 2) x from busintel.f_metric_summary_all_vw where report_month = ':m' and metric_code = 'CSR'
+
+ad-csr  select company_id, decimal(100.0 * sum(case when successful_flag = 'Y' then 1 else 0 end) / count(1), 5, 2) x
+        from busintel.f_change f, busintel.d_date d
+        where f.closed_date_id = d.date_id and d.month_first_day = ':m'
+        group by company_id
+
+cs-csr  select company_id, integer(auto_value) x from busintel.f_metric_summary_all_vw where report_month = ':m' and metric_code = 'I-CHGC'
+
+cd-csr  select company_id, count(1) x
+        from busintel.f_change f, busintel.d_date d
+        where f.closed_date_id = d.date_id and d.month_first_day = ':m'
+        group by company_id
+
+ms-sev1  select company_id, decimal(manual_value, 18, 2) x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'SEV1'
+
+md-sev1  select company_id, decimal(sum(duration)/count(1)/60.0, 18, 2) x
+         from busintel.f_metric_sev_detail
+         where severity = 1 and report_month = ':m'
+         group by company_id
+
+ms-sev2  select company_id, decimal(manual_value, 18, 2) x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'SEV2'
+
+md-sev2  select company_id, decimal(sum(duration)/count(1)/60.0, 18, 2) x
+         from busintel.f_metric_sev_detail
+         where severity = 2 and report_month = ':m'
+         group by company_id
+
+ca-sev1 select company_id, auto_value x from busintel.f_metric_summary_all_vw where report_month = ':m' and metric_code = 'I-SEV1C'
+
+volk-ca-sev1 select company_id, auto_value x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'I-SEV1C' and
+             company_id in (select company_id from busintel.d_company where cdir_cd = 'CDIR-0000010628')
+
+volk-cd-sev1 select company_id, count(1) x
+             from busintel.f_incident
+             where severity_id = 1 and resolution_hours >= 0 and report_month = ':m' and
+                   company_id in (select company_id from busintel.d_company where cdir_cd = 'CDIR-0000010628')
+             group by company_id
+
+cd-sev1 select company_id, count(1) x
+        from busintel.f_incident
+        where severity_id = 1 and resolution_hours >= 0 and report_month = ':m'
+        group by company_id
+
+ca-sev2 select company_id, integer(auto_value) x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'I-SEV2C'
+
+cd-sev2 select company_id, count(1) x
+        from busintel.f_incident
+        where severity_id = 2 and resolution_hours >= 0 and report_month = ':m'
+        group by company_id
+
+ase-sev1   select company_id, decimal(nvl(value_this_month, 0), 18, 2) x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'SEV1'
+
+ase-sev2   select company_id, decimal(nvl(value_this_month, 0), 18, 2) x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'SEV2'
+
+ase-csr    select company_id, decimal(nvl(value_this_month, 0), 18, 2) x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'CSR'
+
+as-unixpu  select company_id, decimal(value_this_month, 18, 2) x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'UNIXPU'
+
+as-winpu   select company_id, decimal(value_this_month, 18, 2) x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'WINPU'
+
+as-srot    select company_id, decimal(value_this_month, 18, 2) x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'SROT'
+
+as-sas70   select company_id, decimal(value_this_month, 18, 2) x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'SAS70OT'
+
+as-ccri    select company_id, decimal(value_this_month, 18, 2) x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'CCRI'
+

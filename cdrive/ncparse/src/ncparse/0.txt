@@ -1,0 +1,352 @@
+;;;; ---------------------------------
+;;;;
+;;;; Parses NC file
+;;;;
+;;;;http://www.sec.gov/answers/form13f.htm
+;;;;ftp://ftp.sec.gov/edgar/Feed
+;;;;http://www.federalreserve.gov/releases/h15/data.htm
+;;;; ---------------------------------
+(ns ncparse.core
+  (:use [clojure.string :as s :exclude [replace reverse join]]
+        [clojure.contrib.str-utils]
+	[clojure.xml :as xml]
+	[ncparse.xml :as ncx]
+	[ncparse.ddl :as ncd]))
+
+(import [java.io ByteArrayInputStream])
+
+(def ncdir   "/Documents and Settings/Administrator/My Documents/Downloads/nc/0")
+(def ncbad "/tim/clojure/ncparse/db/ncbadwt.xml")
+(def ncbig "/tim/clojure/ncparse/db/0000067590-10-000736.nc")
+
+(defn test1
+  [ncdir]
+  (doseq [file (take 30 (line-seq (clojure.java.io/reader ncdir)))]
+    (dprintln (format "\n>>>>>>>>>>>> Parsing %s" file))
+    (let [mp (ncx/ncparse file)
+	  name (first
+		(:content
+		 (first
+		  (filter #(= :CONFORMED-NAME (:tag %)) (xml-seq mp)))))]
+      (println (format "%s - %s" name (count mp))))))
+
+(defn test2
+  [ncdir]
+  (doseq [file (take 3000 (line-seq (clojure.java.io/reader ncdir)))]
+    (let [mp (ncx/ncparse file)
+	  ddl (ncd/emit-ddl mp)
+	  name (first
+		(:content
+		 (first
+		  (filter #(= :CONFORMED-NAME (:tag %)) (xml-seq mp)))))]
+      ddl)))
+
+(defn -main
+  [& args]
+  (test2 ncdir))
+
+
+;(load-file "xml.clj")
+;(load-file "sqlite.clj")
+;(load-file "ddl.clj")
+
+;(load-file "core.clj")
+;(in-ns 'ncparse.core)
+(-main)
+;;;; -----------------------------------------------------
+;;;;
+;;;; xml.clj - parses NC file (bady formed XML file)
+;;;;
+;;;; http://www.sec.gov/answers/form13f.htm
+;;;; ftp://ftp.sec.gov/edgar/Feed
+;;;; http://www.federalreserve.gov/releases/h15/data.htm
+;;;; -----------------------------------------------------
+(ns ncparse.xml
+  (:use [clojure.string :as s :exclude [replace reverse join]]
+        [clojure.contrib.str-utils]
+	[clojure.xml :as xml]
+	[ncparse.ddl]))
+
+;;	[clojure.zip :as zip :exclude [next replace remove]]))
+
+(import [java.io ByteArrayInputStream])
+
+(def DEBUG nil)
+
+(defn valuable?
+  "Returns true, if val has value"
+  [val]
+  (not (empty? val)))
+
+(defn kword
+  "Turns node into a keyword"
+  [node]
+  (->> node
+       chop
+       rest
+       (apply str)
+       lower-case
+       keyword))
+
+(defn dprintln
+  "When DEBUG variable is set, prints its args"
+  [& args]
+  (if DEBUG
+    (apply println args)))
+
+(defn read-ncfile
+  "Reads file, returns its contents as a string"
+  [file]
+  (slurp file))
+
+(defn paganel
+  "Classifies an input line. Returns Paganel array, in which a first element is
+   a keyword classifying the line, the second element is a name of tag,
+   and -- for :node class only -- the third element is a value of a node"
+  [line]
+  (let [[ignore node val stop multival] line]
+    (cond (and node (valuable? val)) [:node node val]
+	  stop                       [:stop stop]
+	  node                       [:branch node]
+	  multival                   [:multival (trim multival)]
+	  :else                      [:other line])))
+
+(let [TFLAG (ref false)
+      text-flag-set (fn [x] (dosync (ref-set TFLAG x)))]
+  (defn text-flag-curval
+    "Returns the value of TFLAG (which is equal to true, when
+     a parsing point is in between <TEXT> and </TEXT> tags)"
+    []
+    @TFLAG)
+  (defn text-flag-reset
+    "Resets the TFLAG to false"
+    []
+    (text-flag-set false))
+  (defn text-flag-flip
+    "Flips TFLAG to opposite value"
+    []
+    (text-flag-set (not @TFLAG))))
+
+;;
+;; Stack implementation
+;;
+(let [STACK (ref '())
+      set-stack (fn [x] (dosync (ref-set STACK x)))]
+  (defn push+ [x]
+    (set-stack (conj @STACK x)))
+  (defn pop+ []
+    (let [x (first @STACK)]
+      (set-stack (rest @STACK))
+      x))
+  (defn get-stack []
+    @STACK)
+  (defn reset-stack []
+    (set-stack '())))
+
+(defn anti
+  "Returns a closing tag. Given tag <text>, returns </text>"
+  [tag]
+  (str "</" (subs tag 1)))
+
+(defn between-tag?
+  "Returns true, when x is between <TEXT> and </TEXT>"
+  [tag x]
+  (let [y (first x)]
+    (cond (and (= y :branch) (= (second x) tag))
+	  (do
+	    (text-flag-flip))
+	  (and (= y :stop) (= (second x) (anti tag)))
+	  (do (text-flag-flip)
+	      true)
+	  :else (text-flag-curval))))
+
+(defn tokenize
+  "Tokenizes an input text into a sequence of records
+   suitable for paganeling"
+  [text]
+  (re-seq #"(<[A-Z]+.*>)(.*)|(</[A-Z]+.*>)|(.+)" text))
+
+(defn kvtree
+  "Takes Paganel type sequence, and parses it into a key/value tree,
+   in which each key is a keyword, and each value is either a string,
+   or an another kvtree.
+
+   Uses stack, so call reset-stack before each new file!"
+  [paganel]
+  (push+ paganel)
+  (loop [acc []]
+    (let [t (pop+)
+	  s (first t)]
+      (if-not s
+	acc
+	(let [rtype (first s)
+	      tag (kword (second s))]
+	  (cond (= :node rtype)     (do
+				      (push+ (rest t))
+				      (recur (conj acc tag (nth s 2))))
+		(= :branch rtype)   (recur (conj acc tag (kvtree (rest t))))
+		(= :stop rtype)     (do (push+ (rest t))
+					acc)
+		:else               (assert false)))))))
+
+
+(defn standard-xml
+  "Converts paganel record to XML. Closes tags, and purifies original file, so
+   it is look more like a standard XML.
+   Assumes that kvt has no sections between <TEXT> </TEXT>"
+  [paga]
+  (reduce (fn [acc x]
+	    (let [f (partial str acc "\n")
+		  [a b c] x]
+	      (cond
+	       (= a :node)	           (f b (s/replace (s/replace c "&" "&amp;") "'" "''") "</" (subs b 1))
+	       (= b "<PRIVATE-TO-PUBLIC>") (f b "YES" "</PRIVATE-TO-PUBLIC>")
+	       (= b "<CONFIRMING-COPY>")   (f b "YES" "</CONFIRMING-COPY>")
+	       (= b "<PAPER>")             (f b "YES" "</PAPER>")
+	       :else                       (f b))))
+	  "" paga))
+
+(defn byte-stream
+  [s]
+  (ByteArrayInputStream. (.getBytes s "UTF-8")))
+
+(defn ncparse
+  [file]
+  "Parses NC file"
+  (text-flag-reset)
+;;  (reset-stack)
+  (let [paga (->> file read-ncfile tokenize (map paganel))
+	notext (filter #(not (between-tag? "<TEXT>" %)) paga)
+	xml (standard-xml notext)
+	xml-map (parse (byte-stream xml))]
+    xml-map))
+;;;;----------------------------------------------------------
+;;;; ddl.clj - generates and deploys DDL
+;;;;----------------------------------------------------------
+(ns ncparse.ddl
+  (:use [clojure.string :as s :exclude [replace reverse join]]
+        [clojure.contrib.str-utils]
+	[clojure.xml :as xml]
+	[clojure.set :as set]
+	[ncparse.sqlite :as sql]))
+
+;;
+;; ID generator
+;;
+(let [ID (ref 0)
+      set-id (fn [x] (dosync (ref-set ID x)))]
+  (defn nextval []
+    (set-id (inc @ID))
+    @ID)
+  (defn reset-id []
+    (set-id 0)))
+
+(defn seg?
+  "Returns true, if e is a segment of a tree"
+  [e]
+  (when e
+    (map? ((:content e) 0))))
+
+(defn csv
+  "Separates the items of a sequence by an arbitrary value"
+  [coll val]
+  (if (empty? coll)
+    coll
+    (reduce #(conj %1 val %2) [(first coll)] (rest coll))))
+
+(defn sql-name
+  "Converts a keyword into a nice table or column name suitable for SQL usage"
+  [kw]
+  (s/replace (.toLowerCase (name kw)) "-" "_"))
+
+(defn ddl-create-table
+  "Retruns SQL create statement"
+  [tbl cols]
+  (list
+   (str "create table " tbl " (\n"
+	(apply str "  " (csv (keys cols) " varchar(50),\n  "))
+	" varchar(50)\n);")))
+
+(defn ddl-alter-table
+  "Returns a list of SQL commands to add missing columns to tbl"
+  [tbl cols present]
+  (map #(str "alter table " tbl " add " %1 " varchar(50);")
+       (set/difference (apply hash-set (keys cols)) present)))
+
+(defn ddl-create-or-alter
+  "Creates (or alters) a database table"
+  [tbl cols]
+  (let [present (sql/tblcols tbl)]
+    (if present
+      (ddl-alter-table tbl cols present)
+      (ddl-create-table tbl cols))))
+
+(defn ddl-insert
+  "Retuns SQL insert statement for table tab with columns cols"
+  [tab cols]
+  (list
+   (str "insert into " tab " ("
+       (apply str (csv (keys cols) ", "))
+       ")\nvalues ('"
+       (apply str (csv (vals cols) "', '"))
+       "');")))
+
+(defn emit-ddl
+  "Returns DDL for a given file"
+  ([e parent]
+     (let [[fk fkid] parent
+	   tab (sql-name (:tag e))
+	   nodes (filter (complement seg?) (:content e))
+	   pk   (str tab "_id")
+	   pkid (nextval)
+	   z1 (-> (zipmap (map #(sql-name (:tag %)) nodes)
+			  (map #(first (:content %)) nodes))
+		  (assoc pk pkid))
+	   cols (if fk (assoc z1 fk fkid) z1)
+	   dd (ddl-create-or-alter tab cols)]
+       (when-not (empty? dd)
+	 (apply sql/execute dd))
+       (apply sql/execute (ddl-insert tab cols))
+       (doseq [s (filter seg? (:content e))]
+	 (emit-ddl s (vector pk pkid)))))
+  ([e]
+     (emit-ddl e nil)))
+;;;;----------------------------------------------------------
+;;;; sqlite.clj - sqlite related functions
+;;;;----------------------------------------------------------
+(ns ncparse.sqlite
+  (:use [clojure.string :as s :exclude [replace reverse join]]
+	[clojure.contrib.sql :as sql]
+	[clojure.contrib.str-utils]))
+
+(def DEBUG true)
+
+(def DB {:classname "org.sqlite.JDBC"
+	 :subprotocol "sqlite"
+	 :subname "C:/tim/clojure/ncparse/db/nc.sqlite3"})
+
+(defn query
+  [q]
+  "Queries the database. Uses DB to connect"
+  (when DEBUG
+    (println "Running: " q))
+  (with-connection DB
+    (with-query-results res [q]
+      (into [] res))))
+
+(defn tblcols
+  "Returns list of columns for a given table"
+  [tbl]
+  (let [q (try
+	    (query (str "pragma table_info(" tbl ")"))
+	    (catch java.sql.SQLException e nil))]
+    (when-not (empty? q)
+      (apply hash-set (map :name q)))))
+
+(defn execute
+  "Execute SQL command in the database"
+  [& cmds]
+  (when cmds
+    (when DEBUG (println "Running: " cmds))
+    (with-connection DB
+      (apply sql/do-commands cmds))))

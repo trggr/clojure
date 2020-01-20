@@ -1,0 +1,3 @@
+C:\tim\clojure\labrepl>lein repl
+user=> (require 'labrepl)
+user=> (labrepl/-main)

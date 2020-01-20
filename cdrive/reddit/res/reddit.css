@@ -1,0 +1,39 @@
+body {
+    font-size: 10pt;
+    font-family: 'Segoe UI', Calibri, 'Myriad Pro', Myriad,
+                 'Trebuchet MS', Helvetica, Arial, sans-serif;
+}
+
+h1 {
+    font-family: "Arial Black";
+    font-size: 130%;
+}
+
+h3 {
+    font-size: 80%;
+    vertical-align: super;
+}
+
+h4 {
+    font-size: 105%;
+    color :red;
+}
+
+a  {
+    margin-left: 5px;
+    margin-right: 5px;
+    color: blue;
+}
+
+span {
+    font-size: 90%;
+    color: rgb(210,210,210);
+}
+
+div#user {
+    width: 300px;
+    left: 350px;
+    top: 0;
+    position: absolute;
+    right: 0;
+}

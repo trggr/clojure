@@ -1,0 +1,279 @@
+;;;; ---------------------------------
+;;;;
+;;;; Parses NC file
+;;;;
+;;;;http://www.sec.gov/answers/form13f.htm
+;;;;ftp://ftp.sec.gov/edgar/Feed
+;;;;http://www.federalreserve.gov/releases/h15/data.htm
+;;;; ---------------------------------
+(ns ncparse.xml
+  (:use [clojure.string :as s]
+        [clojure.contrib.str-utils]
+	[clojure.xml]))
+
+(def DEBUG nil)
+
+(defn valuable?
+  "Returns true, if val has value"
+  [val]
+  (not (empty? val)))
+
+(defn kword
+  "Turns node into a keyword"
+  [node]
+  (->> node
+       chop
+       rest
+       (apply str)
+       lower-case
+       keyword))
+
+(defn dprintln
+  "When DEBUG variable is set, prints its args"
+  [& args]
+  (if DEBUG
+    (apply println args)))
+
+(defn read-ncfile
+  "Reads file, returns its contents as a string"
+  [file]
+  (slurp file))
+
+(defn paganel
+  "Classifies an input line. Returns Paganel array, in which a first element is
+   a keyword classifying the line, the second element is a name of tag,
+   and -- for :node class only -- the third element is a value of a node"
+  [line]
+  (let [[ignore node val stop multival] line]
+    (cond (and node (valuable? val)) [:node node val]
+	  stop                       [:stop stop]
+	  node                       [:branch node]
+	  multival                   [:multival (trim multival)]
+	  :else                      [:other line])))
+
+(let [TFLAG (ref false)
+      text-flag-set (fn [x] (dosync (ref-set TFLAG x)))]
+  (defn text-flag-curval
+    "Returns the value of TFLAG (which is equal to true, when
+     a parsing point is in between <TEXT> and </TEXT> tags)"
+    []
+    @TFLAG)
+  (defn text-flag-reset
+    "Resets the TFLAG to false"
+    []
+    (text-flag-set false))
+  (defn text-flag-flip
+    "Flips TFLAG to opposite value"
+    []
+    (text-flag-set (not @TFLAG))))
+
+;;
+;; Stack implementation
+;;
+(let [STACK (ref '())
+      set-stack (fn [x] (dosync (ref-set STACK x)))]
+  (defn push+ [x]
+    (set-stack (conj @STACK x)))
+  (defn pop+ []
+    (let [x (first @STACK)]
+      (set-stack (rest @STACK))
+      x))
+  (defn get-stack []
+    @STACK)
+  (defn reset-stack []
+    (set-stack '())))
+
+;;
+;; ID generator
+;;
+(let [ID (ref 0)
+      set-id (fn [x] (dosync (ref-set ID x)))]
+  (defn nextval []
+    (set-id (inc @ID))
+    @ID)
+  (defn reset-id []
+    (set-id 0)))
+
+(defn anti
+  "Returns a closing tag. Given tag <text>, returns </text>"
+  [tag]
+  (str "</" (subs tag 1)))
+
+(defn between-tag?
+  "Returns true, when x is between <TEXT> and </TEXT>"
+  [tag x]
+  (let [y (first x)]
+    (cond (and (= y :branch) (= (second x) tag))
+	  (do
+	    (text-flag-flip))
+	  (and (= y :stop) (= (second x) (anti tag)))
+	  (do (text-flag-flip)
+	      true)
+	  :else (text-flag-curval))))
+
+(defn nvl
+  "Returns x, if it's not nil, otherwise returns val"
+  [x val]
+  (if x x val))
+
+(defn tokenize
+  "Tokenizes an input text into a sequence of records
+   suitable for paganeling"
+  [text]
+  (re-seq #"(<[A-Z]+.*>)(.*)|(</[A-Z]+.*>)|(.+)" text))
+
+(defn kvtree
+  "Takes Paganel type sequence, and parses it into a key/value tree,
+   in which each key is a keyword, and each value is either a string,
+   or an another kvtree.
+
+   Uses stack, so call reset-stack before each new file!"
+  [paganel]
+  (push+ paganel)
+  (loop [acc []]
+    (let [t (pop+)
+	  s (first t)]
+      (if-not s
+	acc
+	(let [rtype (first s)
+	      tag (kword (second s))]
+	  (cond (= :node rtype)     (do
+				      (push+ (rest t))
+				      (recur (conj acc tag (nth s 2))))
+		(= :branch rtype)   (recur (conj acc tag (kvtree (rest t))))
+		(= :stop rtype)     (do (push+ (rest t))
+					acc)
+		:else               (assert false)))))))
+
+
+(defn rel-model
+  [kvt]
+  "Takes kvt and converts it into a map, in which keys are relational table names,
+   and values are col-val pairs"
+  (letfn [(save [m k v w]
+		(println (format "k = %s" k))
+		(assoc m k (conj (k m) [v w])))
+	  (f [acc pid kvt]
+	     (loop [acc acc kvt kvt]
+	       (let [[k v & xs] kvt]
+		 (if-not k
+		   acc
+		   (if (coll? v)
+		     (recur (f acc (keyword (str (name k) "." (nextval))) v)
+			    xs)
+		     (recur (save acc pid k v)
+			    xs))))))]
+    (f {} (nextval) kvt)))
+
+(defn ncparse
+  [file]
+  "Parses NC file"
+  (text-flag-reset)
+  (reset-stack)
+  (let [x (->> file read-ncfile tokenize (map paganel))
+	to (filter #(between-tag? "<DOCUMENT>" %) x)
+	kvt (->> x (filter #(not (between-tag? "<TEXT>" %))) kvtree)
+	rm (rel-model kvt)]
+    [rm to kvt]))
+
+
+;; (def ncdir   "/Documents and Settings/Administrator/My Documents/Downloads/nc/0")
+(def ncsmall "/tim/clojure/ncparse/db/nctest.xml")
+(def ncbad "/tim/clojure/ncparse/db/ncbadwt.xml")
+(def ncbig "/tim/clojure/ncparse/db/0000067590-10-000736.nc")
+
+(defn test1
+  [ncdir]
+  (doseq [file (take 1000 (line-seq (clojure.java.io/reader ncdir)))]
+    (let [parsed (ncparse file)
+	  rm (first parsed)]
+      (println (format "%s - %s"
+		       (second (first (filter #(= (first %) :conformed-name) (:company-data rm))))
+		       (count rm))))))
+
+(defn -main
+  [& args]
+  (test1 "/Documents and Settings/Administrator/My Documents/Downloads/nc/0"))
+
+;;
+(import [java.io ByteArrayInputStream])
+
+(def pass1 (->> ncbig read-ncfile tokenize (map paganel)))
+
+
+(reduce
+ (fn [acc x]
+   (let [text? (first acc)
+	 f (partial str (second acc) "\n")
+	 [a b c] x]
+     (cond
+      (and (= a :branch) (= b "<TEXT>"))  [true  (str (second acc) "\n" b)]
+      (and (= a :stop) (= b "</TEXT>"))   [false (str (second acc) "\n" b)]
+      text?                               [true  (str (second acc) "\n" (s/replace (s/replace b "<" "$$") ">" "%%"))]
+      (= a :node)                         [false (str (second acc) "\n" b c "</" (subs b 1))]
+      :else                               [false (str (second acc) "\n" b)])))
+ [false ""] (take 20 pass1))
+
+(defn pass2
+  [pass1]
+  (second
+   (reduce (fn [acc x]
+	     (let [text? (first acc)
+		   f (partial str (second acc) "\n")
+		   [a b c] x]
+	       (cond
+		(and (= a :branch) (= b "<TEXT>")) [true  (f b)]
+		(and (= a :stop) (= b "</TEXT>"))  [false (f b)]
+		text?                              [true  (f (s/replace (s/replace b "<" "$$") ">" "%%"))]
+		(= a :node)                        [false (f b c "</" (subs b 1))]
+		:else                              [false (f b)])))
+	   [false ""] pass1)))
+
+(def xml (pass2 pass1))
+
+(parse (ByteArrayInputStream. (.getBytes xml "UTF-8")))
+
+
+(def a
+     (re-seq (re-pattern (str "(?m)(?s)"
+			      "<DOCUMENT>\r\n"
+			      "<TYPE>(.*)\r\n"
+			      "<SEQUENCE>.*\r\n"
+			      "<FILENAME>(.*)\r\n"
+			      "<DESCRIPTION>(.*)\r\n"
+			      "<TEXT>\r\n(.+)</TEXT>\r\n"
+			      "</DOCUMENT>"))
+	     (read-ncfile ncbad)))
+
+(doseq [e a]
+  (let [[all type fname desc text] e]
+    (println (format "type=%s, fname=%s, desc=%s" type fname desc))))
+
+(defn f1
+  [f2]
+  (let [s (re-seq (re-pattern (str "(?m)(?s)"
+				   "^<DOCUMENT>\r\n"
+				   "^<TYPE>(.*)\r\n"
+				   "^<SEQUENCE>(.*)\r\n"
+				   "^<FILENAME>(.*)\r\n"
+				   "^<DESCRIPTION>(.*)\r\n"
+;;				   "<TEXT>\r\n(.+)</TEXT>\r\n"
+				   "^</DOCUMENT>"))
+		  (read-ncfile f2))]
+    (doseq [e s]
+      (println (format "**** typ=%s\n**** fname=%s\n**** desc=%s" (second e) (nth e 2) (nth e 3))))))
+
+;;    (doseq [e s]
+;;      (let [[x typ fname desc text] e]
+;;	(println (format "**** typ=%s\n**** fname=%s\n**** desc=%s" typ fname desc))))))
+
+
+
+
+(def a (re-seq #"(?m)(?s)<DOCUMENT>\r\n<TYPE>(.*)\r\n(.*)</DOCUMENT>" (read-ncfile ncbad)))
+
+(re-find #"(?m)(?s)<DOCUMENT>\n<TYPE>(.*)\n(.*)</DOCUMENT>"
+	 (str "<DOCUMENT>\n<TYPE>GRAPHIC\n<SEQUENCE>8\n<FILENAME>kpmgconsent0001.jpg\n<DESCRIPTION>GRAPHIC\n<TEXT></DOCUMENT>"))
+
+(re-seq #"(?m)(?s)<DOCUMENT>\n<TYPE>(.*)\n(.*)</DOCUMENT>"
+	 (str "aaaa<DOCUMENT>\n<TYPE>GRAPHIC\n<SEQUENCE>8\n<FILENAME>kpmgconsent0001.jpg\n<DESCRIPTION>GRAPHIC\n<TEXT></DOCUMENT>"))

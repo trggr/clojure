@@ -1,0 +1,23 @@
+masev1 select company_id, auto_value x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'SEV1'
+
+dasev1 select company_id, sum(resolution_hours)/count(1) x
+       from busintel.f_incident
+       where severity_id = 1 and report_month = ':m'
+       group by company_id
+
+masev2 select company_id, auto_value x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'SEV2'
+
+dasev2 select company_id, sum(resolution_hours)/count(1) x
+       from busintel.f_incident
+       where severity_id = 2 and report_month = ':m'
+       group by company_id
+
+macsr  select company_id, auto_value x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'CSR'
+
+dacsr  select company_id, decimal(sum(case when successful_flag = 'Y' then 1 else 0 end)) / count(1) * 100 x
+       from busintel.f_change f, busintel.d_date d
+       where f.closed_date_id = d.date_id and d.date = ':m'
+       group by company_id
+
+
+

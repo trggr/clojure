@@ -1,0 +1,35 @@
+as-sev1 select company_id, auto_value x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'SEV1'
+
+ad-sev1 select company_id, sum(resolution_hours)/count(1) x
+        from busintel.f_incident
+        where severity_id = 1 and resolution_hours > 0 and report_month = ':m'
+        group by company_id
+
+as-sev2 select company_id, auto_value x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'SEV2'
+
+ad-sev2 select company_id, sum(resolution_hours)/count(1) x
+        from busintel.f_incident
+        where severity_id = 2 and resolution_hours > 0 and report_month = ':m'
+        group by company_id
+
+as-csr  select company_id, auto_value x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'CSR'
+
+ad-csr  select company_id, decimal(sum(case when successful_flag = 'Y' then 1 else 0 end)) / count(1) * 100 x
+        from busintel.f_change f, busintel.d_date d
+        where f.closed_date_id = d.date_id and d.date = ':m'
+        group by company_id
+
+ms-sev1  select company_id, manual_value x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'SEV1'
+
+md-sev1  select company_id, sum(duration)/count(1) x
+         from busintel.f_metric_sev_detail
+         where severity = 1 and report_month = ':m'
+         group by company_id
+
+ms-sev2  select company_id, manual_value x from busintel.f_metric_summary_vw where report_month = ':m' and metric_code = 'SEV2'
+
+md-sev2  select company_id, sum(duration)/count(1) x
+         from busintel.f_metric_sev_detail
+         where severity = 2 and report_month = ':m'
+         group by company_id
+

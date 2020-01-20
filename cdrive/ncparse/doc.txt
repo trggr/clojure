@@ -1,0 +1,43 @@
+
+
+The general goal is to pull off and separate agreements that are
+exhibits to EDGAR 10-K and 8-K filings into individual text
+files. Scripts already exist to do the basic work, just a more
+cohesive process needs to be implemented.
+
+More specifically the following process is requested:
+
+1. Pull of a specified index for a given year quarter - use
+http://razor.occams.info/code/repo/?/govtrack/sec/getindex.sh to pull
+down the index
+
+2. In that index, connect again to the server and pull off all 10-K
+and 8-K filings (can use
+http://razor.occams.info/code/repo/?/govtrack/sec/getforms.pl as
+starting point but it will need to be modified)
+
+3. The parse thru the files to pull of and separate the portions of
+the files that are agreements into individual files. The attached
+script will parse the files and pull off the data
+
+An example of this is as follows:
+
+- In the 3rd Quarter of 2008, there is a file in the index named
+  0000950137-04-006413.txt. The full line in the index file is as
+  follows:
+
+1024657|WEST
+CORP|8-K|2004-08-09|edgar/data/1024657/0000950137-04-006413.txt
+
+When that file is downloaded, it looks like the file here -
+http://www.secinfo.com/dsvRm.1682.d.htm
+
+In that file there are two Exhibits - Exhibit 2.1 and 2.2. Both
+contain the word "Agreement" in their title. If this file was parsed,
+the contents in Exhibit 2.1 would be in one resulting file and the
+contents in Exhibit 2.2 would be in another file at the end. Both
+files should have individualized names to make them recognizable such
+as date-name (like "Purchase Agreement")-exhibit) (but can end in txt)
+
+Any modifications to the above scripts will be released under the GNU
+AGPL. Resulting script / program should run on Ubuntu 10.10.

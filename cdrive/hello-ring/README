@@ -1,0 +1,12 @@
+lein repl
+
+REPL started; server listening on localhost:44433.
+user=> (use 'ring.adapter.jetty)
+nil
+user=> (use 'hello-ring.core)
+nil
+user=> (run-jetty what-is-my-address {:port 8080})
+2011-06-06 12:04:38.703::INFO:  Logging to STDERR via org.mortbay.log.StdErrLog
+2011-06-06 12:04:38.703::INFO:  jetty-6.1.14
+2011-06-06 12:04:38.703::INFO:  Started SocketConnector@0.0.0.0:8080
+

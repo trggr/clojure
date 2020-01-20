@@ -1,0 +1,8 @@
+Mother's Little Helper
+
+The set of utilities to work with multiple databases
+to query the frequently used data.
+
+To use:
+   leinO repl
+   (load-file "src/cvp/mlh2.clj")

@@ -1,0 +1,9 @@
+Exception in thread "main" org.openqa.selenium.remote.ErrorHandler$UnknownServerException: Unable to locate element: {"method":"id","selector":"menu-fight_index"}
+Build info: version: '2.5.0', revision: '13548', time: '2011-08-24 13:44:31'
+System info: os.name: 'Windows XP', os.arch: 'x86', os.version: '5.1', java.version: '1.6.0_26'
+Driver info: driver.version: unknown
+	at <anonymous class>.<anonymous method>(file:///c:/tmp/anonymous7925285377663564738webdriver-profile/extensions/fxdriver@googlecode.com/components/driver-component.js -> file:///c:/tmp/anonymous7925285377663564738webdriver-profile/extensions/fxdriver@googlecode.com/components/firefoxDriver.js:387)
+	at <anonymous class>.<anonymous method>(file:///c:/tmp/anonymous7925285377663564738webdriver-profile/extensions/fxdriver@googlecode.com/components/driver-component.js -> file:///c:/tmp/anonymous7925285377663564738webdriver-profile/extensions/fxdriver@googlecode.com/components/firefoxDriver.js:410)
+	at <anonymous class>.<anonymous method>(file:///c:/tmp/anonymous7925285377663564738webdriver-profile/extensions/fxdriver@googlecode.com/components/nsCommandProcessor.js:306)
+	at <anonymous class>.<anonymous method>(file:///c:/tmp/anonymous7925285377663564738webdriver-profile/extensions/fxdriver@googlecode.com/components/nsCommandProcessor.js:320)
+	at <anonymous class>.<anonymous method>(file:///c:/tmp/anonymous7925285377663564738webdriver-profile/extensions/fxdriver@googlecode.com/components/nsCommandProcessor.js:197)

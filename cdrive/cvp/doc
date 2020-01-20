@@ -1,0 +1,58 @@
+Create a Mother's Little Helper, an assistant to
+interractively query CQM or Prism databases.
+
+Example session to query UME database, using query called inci
+which accepts one parameter incident_id IN1234.
+
+   > (load-file "mlh.clj")
+   > (q ume inci IN1234)
+   IN1234 20100102 20100304
+
+1. The program uses multiple connections, stored in the global hash conn
+
+   (def conn {:ume {:classname "com.ibm.db2.jcc.DB2Driver"
+                    :subprotocol "db2"
+                    :subname "//b03cxnp01028.gho.boulder.ibm.com:50004/smiwsla:retrieveMessagesFromServerOnGetMessage=true;"
+                    :user "cqmetl"
+                    :password "autumna1"}
+              :cqm {:classname "com.ibm.db2.jcc.DB2Driver"
+                    :subprotocol "db2"
+                    :subname "//b03cxnp46023.gho.boulder.ibm.com:60001/cqm_prod:retrieveMessagesFromServerOnGetMessage=true;"
+                    :user "tashchep"
+                    :password "rain2snow"}})
+
+2. The queries are stored in the external file mlh-queries.txt in the following format:
+
+   inci  select trim(t.incident_id) incident_id, t.open_date_id, t.resolved_date_id
+         from smiw.t_incident t,
+              smiw.d_company c
+         where t.company_id = c.company_id and
+               t.incident_id in '$1'
+               with ur
+
+   incid select trim(t.incident_id) incident_id, t.open_date_id, t.resolved_date_id
+         from smiw.t_incident t,
+              smiw.d_company c
+         where t.company_id = c.company_id and
+               t.incident_id = '$1' and
+               d.cdir_cd = '$2'
+               with ur
+
+in here the first query accepts only one parameter, while the second query accepts two.
+Each occurence of $1 and $2 in the runtime will be replaced with actuall parameters
+supplied by user. For example, if you:
+
+   > (q ume incid IN1234 CDIR-123)
+
+then $1 will be bind to IN1234, and $2 t CDIR-123.
+
+3. Each query will be converted to a Clojure function with at least
+one parameter - the name of the of the database in which to run a query. The
+function may have additional parameters, one for each $parameter found in
+the source code of a query. For example, incid query will become a function
+of three parameters: [db p1 p2].
+
+
+
+
+

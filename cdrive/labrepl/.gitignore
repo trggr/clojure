@@ -1,0 +1,9 @@
+bin/*
+classes/*
+lib/*
+autodoc/*
+.circumspec/*
+log
+*~
+target
+/logs/labrepl.log

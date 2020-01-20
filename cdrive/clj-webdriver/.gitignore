@@ -1,0 +1,8 @@
+pom.xml
+*jar
+lib
+classes
+outline*.html
+docs
+/.lein-failures
+/results.txt
